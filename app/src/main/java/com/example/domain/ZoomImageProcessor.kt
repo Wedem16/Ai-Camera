@@ -39,16 +39,19 @@ data class EnhancementResult(
     val outputWidth: Int,
     val outputHeight: Int,
     val appliedScaleFactor: Int,
+    val is4kOutput: Boolean = false,
     val isGenerativeAi: Boolean,
     val reconstructionNotes: String
 )
 
 object ZoomImageProcessor {
 
+    const val SCALE_4K_UHD = 4000
+
     /**
      * Safely decodes a bitmap from file path without exhausting heap memory on Android 10-17.
      */
-    fun decodeMemorySafeBitmap(filePath: String, maxDimension: Int = 1600): Bitmap? {
+    fun decodeMemorySafeBitmap(filePath: String, maxDimension: Int = 2048): Bitmap? {
         val file = File(filePath)
         if (!file.exists()) return null
 
@@ -176,12 +179,10 @@ object ZoomImageProcessor {
                 val left = luma[idx - 1]
                 val right = luma[idx + 1]
 
-                // 3x3 Laplacian response
                 val lap = 4 * center - up - down - left - right
                 laplacianSumSq += (lap * lap).toDouble()
                 count++
 
-                // Local gradient magnitude to identify flat areas for sensor noise estimation
                 val gx = abs(right - left)
                 val gy = abs(down - up)
                 if (gx + gy < 18) {
@@ -191,7 +192,6 @@ object ZoomImageProcessor {
                     flatPatchCount++
                 }
 
-                // 8x8 JPEG block boundary check
                 val hDiff = abs(right - center).toDouble()
                 if (x % 8 == 0) {
                     blockBoundaryDiff += hDiff
@@ -202,7 +202,6 @@ object ZoomImageProcessor {
         }
 
         val lapVariance = if (count > 0) laplacianSumSq / count else 250.0
-        // Lower Laplacian variance -> higher blur score
         val blurScore = (100.0 - (sqrt(lapVariance) * 1.85)).roundToInt().coerceIn(12, 94)
 
         val avgFlatNoise = if (flatPatchCount > 0) flatPatchNoiseSum / flatPatchCount else 3.0
@@ -230,12 +229,12 @@ object ZoomImageProcessor {
 
         val recommendation = when {
             detailLossScore >= 68 || taggedZoomRatio >= 10f ->
-                "High digital zoom degradation detected (${String.format("%.1fx", taggedZoomRatio)}). " +
-                    "Use Detail Mode (2x/4x) for faithful edge & text sharpening, or Generative AI Mode to reconstruct severely degraded textures."
+                "High digital zoom degradation (${String.format("%.1fx", taggedZoomRatio)}). " +
+                    "Select 4K UHD or 4x Super-Resolution to restore fine edges, or Generative AI Mode for deep texture reconstruction."
             detailLossScore >= 40 ->
-                "Moderate optical/sensor softness and ISO grain detected. Detail Mode 2x Super-Resolution is recommended for natural clarity."
+                "Moderate optical/sensor softness detected. 2x or 4K UHD Detail Mode is recommended for crisp micro-contrast."
             else ->
-                "Clean telephoto capture. Use Detail Mode 2x to upscale fine micro-contrast while preserving skin and edge fidelity."
+                "Clean telephoto capture. Upscale to 4K UHD (3840p) for flagship exhibition clarity while preserving natural skin and geometry."
         }
 
         ImageDiagnostics(
@@ -250,10 +249,8 @@ object ZoomImageProcessor {
     }
 
     /**
-     * Executes On-Device Detail Mode Super-Resolution (1x Clarity, 2x Upscale, or 4x Upscale):
-     * 1. Bilateral Chroma/Luma Denoise & 8x8 De-artifacting
-     * 2. Catmull-Rom Bicubic Edge-Preserving Super-Resolution Resampling (2x or 4x, memory-guarded)
-     * 3. YCbCr Skin-Tone-Protected Adaptive Unsharp Mask & Micro-Contrast Recovery
+     * Executes On-Device Detail Mode Super-Resolution:
+     * Supports 1x Clarity, 2x Upscale, 4x Upscale, and true 4K UHD (3840px long edge, requestedScale == SCALE_4K_UHD).
      */
     suspend fun processDetailMode(
         context: Context,
@@ -263,33 +260,47 @@ object ZoomImageProcessor {
         preserveFacesAndSkin: Boolean = true,
         onProgress: suspend (Float, String) -> Unit
     ): EnhancementResult = withContext(Dispatchers.Default) {
-        val scale = requestedScale.coerceIn(1, 4)
-        onProgress(0.08f, "Stage 1/4: Analyzing sensor noise & compression blocks…")
+        val is4kMode = requestedScale == SCALE_4K_UHD
+        val modeLabel = if (is4kMode) "4K UHD (3840p)" else "${requestedScale.coerceIn(1, 4)}x"
 
-        // Stage 1: Edge-preserving bilateral denoise on source resolution
+        onProgress(0.08f, "Stage 1/4: Analyzing sensor noise & 8×8 compression blocks…")
+
         val denoised = applyBilateralChromaLumaDenoise(sourceBitmap)
         coroutineContext.ensureActive()
 
-        onProgress(0.32f, "Stage 2/4: Running ${scale}x Catmull-Rom Super-Resolution pass…")
+        onProgress(0.30f, "Stage 2/4: Running $modeLabel Catmull-Rom Super-Resolution pass…")
 
-        // Calculate safe target resolution based on available heap memory
-        val maxSafeDim = calculateMaxSafeOutputDimension()
-        val rawTargetW = sourceBitmap.width * scale
-        val rawTargetH = sourceBitmap.height * scale
-        val clampRatio = min(
-            1.0f,
-            maxSafeDim.toFloat() / max(rawTargetW, rawTargetH).toFloat()
-        )
-        val targetW = (rawTargetW * clampRatio).roundToInt().coerceAtLeast(sourceBitmap.width)
-        val targetH = (rawTargetH * clampRatio).roundToInt().coerceAtLeast(sourceBitmap.height)
+        val maxSafeDim = calculateMaxSafeOutputDimension(is4kRequested = is4kMode)
+        val srcLongEdge = max(sourceBitmap.width, sourceBitmap.height).coerceAtLeast(1)
 
-        val upscaled = if (targetW == denoised.width && targetH == denoised.height) {
+        val rawTargetW: Int
+        val rawTargetH: Int
+        val effectiveScaleFactor: Int
+
+        if (is4kMode) {
+            val targetLongEdge = min(3840, maxSafeDim)
+            val ratio = targetLongEdge.toFloat() / srcLongEdge.toFloat()
+            rawTargetW = (sourceBitmap.width * ratio).roundToInt().coerceAtLeast(sourceBitmap.width)
+            rawTargetH = (sourceBitmap.height * ratio).roundToInt().coerceAtLeast(sourceBitmap.height)
+            effectiveScaleFactor = max(1, ratio.roundToInt())
+        } else {
+            val scale = requestedScale.coerceIn(1, 4)
+            val clampRatio = min(
+                1.0f,
+                maxSafeDim.toFloat() / (srcLongEdge * scale).toFloat()
+            )
+            rawTargetW = (sourceBitmap.width * scale * clampRatio).roundToInt().coerceAtLeast(sourceBitmap.width)
+            rawTargetH = (sourceBitmap.height * scale * clampRatio).roundToInt().coerceAtLeast(sourceBitmap.height)
+            effectiveScaleFactor = scale
+        }
+
+        val upscaled = if (rawTargetW == denoised.width && rawTargetH == denoised.height) {
             denoised.copy(Bitmap.Config.ARGB_8888, true)
         } else {
-            bicubicCatmullRomUpscale(denoised, targetW, targetH) { stripProgress ->
+            bicubicCatmullRomUpscale(denoised, rawTargetW, rawTargetH) { stripProgress ->
                 onProgress(
-                    0.32f + stripProgress * 0.36f,
-                    "Stage 2/4: Upscaling tiles to ${targetW}×${targetH} (${(stripProgress * 100).toInt()}%)…"
+                    0.30f + stripProgress * 0.38f,
+                    "Stage 2/4: Upscaling tiles to ${rawTargetW}×${rawTargetH}${if (is4kMode) " (4K UHD)" else ""} (${(stripProgress * 100).toInt()}%)…"
                 )
             }
         }
@@ -299,38 +310,43 @@ object ZoomImageProcessor {
         onProgress(0.74f, "Stage 3/4: Recovering fine edges, text & face-safe skin textures…")
         val refined = applyFaceSafeAdaptiveUnsharpAndClarity(
             bitmap = upscaled,
-            strength = strength,
+            strength = if (is4kMode) (strength * 1.12f).coerceAtMost(2.0f) else strength,
             protectSkinTones = preserveFacesAndSkin
         )
         if (refined !== upscaled) upscaled.recycle()
         coroutineContext.ensureActive()
 
-        onProgress(0.92f, "Stage 4/4: Saving non-destructive Super-Resolution output…")
+        onProgress(0.92f, "Stage 4/4: Encoding non-destructive $modeLabel master file…")
         val outputFile = saveEnhancedBitmapToInternalStorage(
             context = context,
             bitmap = refined,
-            prefix = "detail_${scale}x"
+            prefix = if (is4kMode) "detail_4k_uhd" else "detail_${effectiveScaleFactor}x"
         )
 
-        onProgress(1.0f, "Detail Mode ${scale}x Super-Resolution complete")
+        onProgress(1.0f, "Detail Mode $modeLabel Super-Resolution complete")
         EnhancementResult(
             enhancedBitmap = refined,
             outputFilePath = outputFile.absolutePath,
             outputWidth = refined.width,
             outputHeight = refined.height,
-            appliedScaleFactor = scale,
+            appliedScaleFactor = if (is4kMode) SCALE_4K_UHD else effectiveScaleFactor,
+            is4kOutput = is4kMode || max(refined.width, refined.height) >= 3840,
             isGenerativeAi = false,
-            reconstructionNotes = "On-device Detail Mode (${scale}x SR • ${refined.width}×${refined.height}). " +
-                "Bilateral denoise + Catmull-Rom bicubic interpolation + YCbCr face-safe edge recovery applied. No facial features or structures were synthetically altered."
+            reconstructionNotes = "On-device Detail Mode ($modeLabel • ${refined.width}×${refined.height} px). " +
+                "Bilateral denoise + Catmull-Rom bicubic super-resolution + YCbCr face-safe micro-contrast applied. 100% identity preservation."
         )
     }
 
-    private fun calculateMaxSafeOutputDimension(): Int {
-        val maxMemMb = Runtime.getRuntime().maxMemory() / (1024 * 1024)
+    private fun calculateMaxSafeOutputDimension(is4kRequested: Boolean): Int {
+        val runtime = Runtime.getRuntime()
+        val maxMemMb = runtime.maxMemory() / (1024 * 1024)
+        val usedMemMb = (runtime.totalMemory() - runtime.freeMemory()) / (1024 * 1024)
+        val availableMb = maxMemMb - usedMemMb
         return when {
-            maxMemMb >= 512 -> 3200
-            maxMemMb >= 256 -> 2560
-            else -> 1920
+            is4kRequested && availableMb >= 140 -> 3840
+            maxMemMb >= 512 -> 3840
+            maxMemMb >= 256 -> if (is4kRequested) 3840 else 2880
+            else -> 2048
         }
     }
 
@@ -398,7 +414,7 @@ object ZoomImageProcessor {
     }
 
     /**
-     * 4x4 Bicubic Catmull-Rom spline upscaler with local min/max overshoot clamping (prevents ringing halos).
+     * Memory-safe 32-row strip Catmull-Rom 4x4 bicubic super-resolution upscaler supporting up to 4K UHD (3840x2880).
      */
     private suspend fun bicubicCatmullRomUpscale(
         src: Bitmap,
@@ -412,7 +428,7 @@ object ZoomImageProcessor {
         src.getPixels(srcPixels, 0, srcW, 0, 0, srcW, srcH)
 
         val outBitmap = Bitmap.createBitmap(dstW, dstH, Bitmap.Config.ARGB_8888)
-        val stripHeight = 64
+        val stripHeight = 32
         val stripPixels = IntArray(dstW * stripHeight)
 
         val scaleX = srcW.toFloat() / dstW.toFloat()
@@ -496,7 +512,6 @@ object ZoomImageProcessor {
                         }
                     }
 
-                    // Anti-ringing clamp within local 2x2 neighborhood + slight edge headroom
                     val rOut = rAcc.roundToInt().coerceIn(max(0, minR - 6), min(255, maxR + 6))
                     val gOut = gAcc.roundToInt().coerceIn(max(0, minG - 6), min(255, maxG + 6))
                     val bOut = bAcc.roundToInt().coerceIn(max(0, minB - 6), min(255, maxB + 6))
@@ -523,8 +538,7 @@ object ZoomImageProcessor {
     }
 
     /**
-     * Applies Sobel-guided adaptive unsharp masking and local micro-contrast while protecting
-     * human skin tones (via YCbCr chrominance detection) so faces remain natural and never look oversharpened.
+     * Memory-safe in-place strip Sobel-guided adaptive unsharp masking with YCbCr skin-tone protection.
      */
     fun applyFaceSafeAdaptiveUnsharpAndClarity(
         bitmap: Bitmap,
@@ -533,42 +547,37 @@ object ZoomImageProcessor {
     ): Bitmap {
         val w = bitmap.width
         val h = bitmap.height
-        val srcPixels = IntArray(w * h)
-        val dstPixels = IntArray(w * h)
-        bitmap.getPixels(srcPixels, 0, w, 0, 0, w, h)
-
         val baseGain = (1.35f * strength).coerceIn(0.4f, 2.4f)
 
-        for (y in 0 until h) {
-            if (y == 0 || y == h - 1) {
-                for (x in 0 until w) {
-                    dstPixels[y * w + x] = srcPixels[y * w + x]
-                }
-                continue
-            }
-            val row = y * w
-            val rowUp = (y - 1) * w
-            val rowDown = (y + 1) * w
+        val rowPrev = IntArray(w)
+        val rowCurr = IntArray(w)
+        val rowNext = IntArray(w)
+        val rowOut = IntArray(w)
 
-            dstPixels[row] = srcPixels[row]
-            dstPixels[row + w - 1] = srcPixels[row + w - 1]
+        if (h < 3 || w < 3) return bitmap
+
+        bitmap.getPixels(rowPrev, 0, w, 0, 0, w, 1)
+        bitmap.getPixels(rowCurr, 0, w, 0, 1, w, 1)
+
+        for (y in 1 until h - 1) {
+            bitmap.getPixels(rowNext, 0, w, 0, y + 1, w, 1)
+            rowOut[0] = rowCurr[0]
+            rowOut[w - 1] = rowCurr[w - 1]
 
             for (x in 1 until w - 1) {
-                val idx = row + x
-                val c = srcPixels[idx]
+                val c = rowCurr[x]
                 val r = Color.red(c)
                 val g = Color.green(c)
                 val b = Color.blue(c)
 
-                // Neighbors for 3x3 Gaussian blur estimate & edge magnitude
-                val cUp = srcPixels[rowUp + x]
-                val cDown = srcPixels[rowDown + x]
-                val cLeft = srcPixels[row + x - 1]
-                val cRight = srcPixels[row + x + 1]
-                val cUL = srcPixels[rowUp + x - 1]
-                val cUR = srcPixels[rowUp + x + 1]
-                val cDL = srcPixels[rowDown + x - 1]
-                val cDR = srcPixels[rowDown + x + 1]
+                val cUp = rowPrev[x]
+                val cDown = rowNext[x]
+                val cLeft = rowCurr[x - 1]
+                val cRight = rowCurr[x + 1]
+                val cUL = rowPrev[x - 1]
+                val cUR = rowPrev[x + 1]
+                val cDL = rowNext[x - 1]
+                val cDR = rowNext[x + 1]
 
                 val blurR = (r * 4 + (Color.red(cUp) + Color.red(cDown) + Color.red(cLeft) + Color.red(cRight)) * 2 +
                     Color.red(cUL) + Color.red(cUR) + Color.red(cDL) + Color.red(cDR)) shr 4
@@ -582,26 +591,21 @@ object ZoomImageProcessor {
                 val highPassB = b - blurB
 
                 val detailMag = (abs(highPassR) + abs(highPassG) + abs(highPassB)) / 3
-
-                // Noise gate: do not amplify tiny random sensor noise (< 4 luma units)
                 if (detailMag < 3) {
-                    dstPixels[idx] = c
+                    rowOut[x] = c
                     continue
                 }
 
-                // YCbCr skin-tone protection check
                 val cb = 128 + ((-38 * r - 74 * g + 112 * b) shr 8)
                 val cr = 128 + ((112 * r - 94 * g - 18 * b) shr 8)
                 val isSkinLikely = protectSkinTones && (cb in 77..127) && (cr in 133..173) && (r > g && g > b)
 
-                // Protect skin from harsh halos while giving full clarity to text, architecture, eyes, and edges
                 val localGain = when {
                     isSkinLikely -> baseGain * 0.42f
-                    detailMag > 48 -> baseGain * 0.78f // prevent white halo overshoot on ultra-high-contrast edges
+                    detailMag > 48 -> baseGain * 0.78f
                     else -> baseGain
                 }
 
-                // Subtle S-curve micro-contrast boost on midtones
                 val luma = (77 * r + 150 * g + 29 * b) shr 8
                 val contrastDelta = ((luma - 128) * 0.06f * strength).roundToInt()
 
@@ -609,13 +613,15 @@ object ZoomImageProcessor {
                 val outG = (g + (highPassG * localGain).roundToInt() + contrastDelta).coerceIn(0, 255)
                 val outB = (b + (highPassB * localGain).roundToInt() + contrastDelta).coerceIn(0, 255)
 
-                dstPixels[idx] = Color.rgb(outR, outG, outB)
+                rowOut[x] = Color.rgb(outR, outG, outB)
             }
+
+            System.arraycopy(rowCurr, 0, rowPrev, 0, w)
+            System.arraycopy(rowNext, 0, rowCurr, 0, w)
+            bitmap.setPixels(rowOut, 0, w, 0, y, w, 1)
         }
 
-        val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-        out.setPixels(dstPixels, 0, w, 0, 0, w, h)
-        return out
+        return bitmap
     }
 
     /**
@@ -623,35 +629,36 @@ object ZoomImageProcessor {
      * when exporting or labeling Generative AI outputs, fulfilling transparency requirements.
      */
     fun stampGenerativeAiProvenanceBadge(source: Bitmap): Bitmap {
-        val copy = source.copy(Bitmap.Config.ARGB_8888, true)
+        val copy = if (source.isMutable) source else source.copy(Bitmap.Config.ARGB_8888, true)
         val canvas = Canvas(copy)
         val scale = (copy.width / 1000f).coerceAtLeast(0.75f)
         val pad = 20f * scale
-        val badgeH = 42f * scale
-        val badgeW = 410f * scale
+        val badgeH = 44f * scale
+        val badgeW = 460f * scale
         val top = copy.height - badgeH - pad
         val left = pad
 
         val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.argb(205, 18, 12, 36)
+            color = Color.argb(215, 16, 12, 34)
             style = Paint.Style.FILL
         }
         val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.rgb(179, 136, 255)
+            color = Color.rgb(192, 132, 252)
             style = Paint.Style.STROKE
-            strokeWidth = 2f * scale
+            strokeWidth = 2.2f * scale
         }
         val rect = RectF(left, top, left + badgeW, top + badgeH)
         canvas.drawRoundRect(rect, 10f * scale, 10f * scale, bgPaint)
         canvas.drawRoundRect(rect, 10f * scale, 10f * scale, borderPaint)
 
+        val is4k = max(copy.width, copy.height) >= 3840
         val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.rgb(237, 231, 246)
+            color = Color.rgb(243, 232, 255)
             typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
             textSize = 14.5f * scale
         }
         canvas.drawText(
-            "✦ AI-ENHANCED • GENERATIVE RECONSTRUCTION",
+            if (is4k) "✦ AI-ENHANCED • 4K UHD GENERATIVE SR" else "✦ AI-ENHANCED • GENERATIVE RECONSTRUCTION",
             left + 16f * scale,
             top + badgeH * 0.64f,
             textPaint

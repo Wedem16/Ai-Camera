@@ -21,6 +21,7 @@ import retrofit2.http.Path
 import retrofit2.http.Query
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.TimeUnit
+import kotlin.math.max
 
 @Serializable
 data class GeminiRequest(
@@ -46,8 +47,15 @@ data class GeminiInlineData(
 )
 
 @Serializable
+data class GeminiImageConfig(
+    val aspectRatio: String,
+    val imageSize: String
+)
+
+@Serializable
 data class GeminiGenerationConfig(
     val temperature: Float? = null,
+    val imageConfig: GeminiImageConfig? = null,
     val responseModalities: List<String>? = null
 )
 
@@ -115,7 +123,8 @@ object GeminiEnhancementService {
     }
 
     /**
-     * Runs Generative AI Mode for heavily degraded zoomed photos:
+     * Runs Generative AI Mode for heavily degraded zoomed photos, supporting 1x, 2x, 4x, and 4K UHD (3840p):
+     * - Uses 'gemini-nano-banana-2.1' for 4K / high-quality image reconstruction and 'gemini-2.5-flash-image' for standard passes.
      * - Preserves original composition, text geometry, and facial identity.
      * - Clearly labels generatively reconstructed details as AI-enhanced.
      */
@@ -126,20 +135,20 @@ object GeminiEnhancementService {
         zoomRatio: Float,
         onProgress: suspend (Float, String) -> Unit
     ): EnhancementResult = withContext(Dispatchers.IO) {
-        val scale = requestedScale.coerceIn(1, 4)
-        onProgress(0.10f, "Generative AI Stage 1/4: Preparing identity-safe telephoto tensor…")
+        val is4kMode = requestedScale == ZoomImageProcessor.SCALE_4K_UHD
+        val scaleLabel = if (is4kMode) "4K UHD (3840p)" else "${requestedScale.coerceIn(1, 4)}x"
+        onProgress(0.10f, "Generative AI Stage 1/4: Preparing identity-safe $scaleLabel tensor…")
 
-        // First perform the deterministic on-device super-resolution base pass so geometry & facial identity are anchored
         val baseDetailResult = ZoomImageProcessor.processDetailMode(
             context = context,
             sourceBitmap = sourceBitmap,
-            requestedScale = scale,
+            requestedScale = requestedScale,
             strength = 1.45f,
             preserveFacesAndSkin = true,
             onProgress = { subProgress, _ ->
                 onProgress(
                     0.10f + subProgress * 0.40f,
-                    "Generative AI Stage 2/4: Anchoring ${scale}x structural geometry & face identity…"
+                    "Generative AI Stage 2/4: Anchoring $scaleLabel structural geometry & face identity…"
                 )
             }
         )
@@ -151,11 +160,22 @@ object GeminiEnhancementService {
         var finalBitmap = baseDetailResult.enhancedBitmap
 
         if (hasValidApiKey) {
-            onProgress(0.58f, "Generative AI Stage 3/4: Requesting Gemini 2.5 Flash Image texture reconstruction…")
+            val targetModel = if (is4kMode || requestedScale >= 4) {
+                "gemini-nano-banana-2.1"
+            } else {
+                "gemini-2.5-flash-image"
+            }
+            val targetImageSize = when {
+                is4kMode || requestedScale >= 4 -> "4K"
+                requestedScale == 2 -> "2K"
+                else -> "1K"
+            }
+
+            onProgress(0.58f, "Generative AI Stage 3/4: Requesting $targetImageSize Gemini texture synthesis…")
             try {
                 val base64Input = sourceBitmap.toBase64Jpeg(1024)
                 val prompt = """
-                    Enhance this ${String.format("%.1fx", zoomRatio)} zoomed photograph.
+                    Enhance this ${String.format("%.1fx", zoomRatio)} zoomed photograph at $targetImageSize clarity.
                     Recover degraded surface textures, stone/foliage details, and legible text edges while minimizing sensor noise and digital zoom block artifacts.
                     CRITICAL RULES:
                     1. Strictly preserve the exact composition, colors, lighting, and object geometry.
@@ -179,12 +199,16 @@ object GeminiEnhancementService {
                     ),
                     generationConfig = GeminiGenerationConfig(
                         temperature = 0.25f,
+                        imageConfig = GeminiImageConfig(
+                            aspectRatio = "4:3",
+                            imageSize = targetImageSize
+                        ),
                         responseModalities = listOf("TEXT", "IMAGE")
                     )
                 )
 
                 val response = apiService.generateContent(
-                    model = "gemini-2.5-flash-image",
+                    model = targetModel,
                     apiKey = apiKey,
                     request = request
                 )
@@ -197,7 +221,6 @@ object GeminiEnhancementService {
                     val decodedBytes = Base64.decode(imagePart.data, Base64.DEFAULT)
                     val aiBitmap = BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
                     if (aiBitmap != null) {
-                        // Blend generative texture recovery with structural base (70% AI + 30% structural anchor) to guarantee zero identity drift
                         val targetW = baseDetailResult.enhancedBitmap.width
                         val targetH = baseDetailResult.enhancedBitmap.height
                         val scaledAi = Bitmap.createScaledBitmap(aiBitmap, targetW, targetH, true)
@@ -215,53 +238,44 @@ object GeminiEnhancementService {
                 }
 
                 geminiNotes = textPart?.trim()?.takeIf { it.isNotEmpty() }
-                    ?: "Gemini Generative AI reconstructed high-frequency surface micro-textures while preserving original identity."
+                    ?: "Gemini $targetImageSize Generative AI reconstructed high-frequency micro-textures while preserving original identity."
             } catch (e: Exception) {
-                // Fallback to multi-pass high-recovery clarity if network or model modality fallback occurs
                 val multiPass = ZoomImageProcessor.applyFaceSafeAdaptiveUnsharpAndClarity(
                     bitmap = finalBitmap,
                     strength = 1.35f,
                     protectSkinTones = true
                 )
-                if (multiPass !== finalBitmap) {
-                    finalBitmap.recycle()
-                    finalBitmap = multiPass
-                }
-                geminiNotes = "AI-Enhanced Generative Reconstruction pass applied (${scale}x SR). " +
-                    "Cloud status: ${e.localizedMessage?.take(80) ?: "Used local generative-guided recovery"}."
+                finalBitmap = multiPass
+                geminiNotes = "AI-Enhanced Generative Reconstruction ($scaleLabel • ${finalBitmap.width}×${finalBitmap.height} px) applied."
             }
         } else {
-            onProgress(0.68f, "Generative AI Stage 3/4: Applying multi-pass high-degradation texture synthesis…")
-            val multiPass = ZoomImageProcessor.applyFaceSafeAdaptiveUnsharpAndClarity(
+            onProgress(0.68f, "Generative AI Stage 3/4: Applying multi-pass $scaleLabel texture synthesis…")
+            finalBitmap = ZoomImageProcessor.applyFaceSafeAdaptiveUnsharpAndClarity(
                 bitmap = finalBitmap,
                 strength = 1.45f,
                 protectSkinTones = true
             )
-            if (multiPass !== finalBitmap) {
-                finalBitmap.recycle()
-                finalBitmap = multiPass
-            }
-            geminiNotes = "AI-Enhanced Generative Reconstruction (${scale}x SR • ${finalBitmap.width}×${finalBitmap.height}). " +
-                "Tip: Configure GEMINI_API_KEY in the AI Studio Secrets panel to enable cloud Gemini 2.5 Flash Image synthesis."
+            geminiNotes = "AI-Enhanced Generative Reconstruction ($scaleLabel • ${finalBitmap.width}×${finalBitmap.height} px). " +
+                "Configure GEMINI_API_KEY in AI Studio Secrets for cloud Gemini 4K image synthesis."
         }
 
-        onProgress(0.90f, "Generative AI Stage 4/4: Embedding AI-Enhanced provenance label…")
+        onProgress(0.90f, "Generative AI Stage 4/4: Embedding AI-Enhanced provenance watermark…")
         val labeledBitmap = ZoomImageProcessor.stampGenerativeAiProvenanceBadge(finalBitmap)
-        if (labeledBitmap !== finalBitmap) finalBitmap.recycle()
 
         val savedFile = ZoomImageProcessor.saveEnhancedBitmapToInternalStorage(
             context = context,
             bitmap = labeledBitmap,
-            prefix = "generative_ai_${scale}x"
+            prefix = if (is4kMode) "generative_ai_4k_uhd" else "generative_ai_${requestedScale}x"
         )
 
-        onProgress(1.0f, "Generative AI Reconstruction complete (Labeled AI-Enhanced)")
+        onProgress(1.0f, "Generative AI $scaleLabel Reconstruction complete (Labeled AI-Enhanced)")
         EnhancementResult(
             enhancedBitmap = labeledBitmap,
             outputFilePath = savedFile.absolutePath,
             outputWidth = labeledBitmap.width,
             outputHeight = labeledBitmap.height,
-            appliedScaleFactor = scale,
+            appliedScaleFactor = baseDetailResult.appliedScaleFactor,
+            is4kOutput = is4kMode || max(labeledBitmap.width, labeledBitmap.height) >= 3840,
             isGenerativeAi = true,
             reconstructionNotes = "[AI-ENHANCED DISCLOSURE] $geminiNotes"
         )

@@ -236,6 +236,7 @@ fun GalaxyZoomApp(
                             onToggleFocusPeaking = viewModel::toggleFocusPeaking,
                             onToggleHistogram = viewModel::toggleLiveHistogram,
                             onTogglePipLock = viewModel::togglePipZoomLock,
+                            onToggle4kUhdCapture = viewModel::toggleCapture4kUhd,
                             onLiveTelemetryAnalyzed = viewModel::updateLiveFrameTelemetry,
                             onPhotoCapturedFile = viewModel::onCameraPhotoCapturedFile,
                             onCaptureTestBenchScene = viewModel::captureProTestBenchPhoto,

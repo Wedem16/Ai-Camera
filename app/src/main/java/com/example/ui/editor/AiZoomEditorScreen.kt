@@ -42,8 +42,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -59,6 +57,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
@@ -70,18 +69,26 @@ import coil.compose.AsyncImage
 import com.example.R
 import com.example.data.EnhancementMode
 import com.example.data.PhotoRecord
+import com.example.domain.ZoomImageProcessor
 import com.example.ui.EditorUiState
 import com.example.ui.components.BeforeAfterComparisonView
+import com.example.ui.theme.ChampagneGold
 import com.example.ui.theme.ControlPodSurface
 import com.example.ui.theme.ElevatedCardSurface
 import com.example.ui.theme.GalaxyLaserAmber
 import com.example.ui.theme.GenerativeViolet
+import com.example.ui.theme.LuxuryCardBrush
+import com.example.ui.theme.LuxuryHeaderBrush
 import com.example.ui.theme.ObsidianBackground
+import com.example.ui.theme.ObsidianDeep
 import com.example.ui.theme.OpticCyan
 import com.example.ui.theme.StatusCritical
 import com.example.ui.theme.StatusOptimal
 import com.example.ui.theme.StatusWarning
+import com.example.ui.theme.TitaniumHighlight
+import com.example.ui.theme.Ultra4kEmerald
 import java.io.File
+import kotlin.math.max
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -120,53 +127,103 @@ fun AiZoomEditorScreen(
             .fillMaxSize()
             .background(ObsidianBackground)
             .verticalScroll(scrollState)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // 1. Top Header & Import Action
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        // 1. Flagship Galaxy S-Ultra Luxury Studio Banner
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(20.dp))
+                .background(LuxuryHeaderBrush)
+                .border(
+                    1.dp,
+                    Brush.horizontalGradient(
+                        listOf(GalaxyLaserAmber.copy(alpha = 0.7f), TitaniumHighlight, OpticCyan.copy(alpha = 0.6f))
+                    ),
+                    RoundedCornerShape(20.dp)
+                )
+                .padding(horizontal = 16.dp, vertical = 14.dp)
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "AI SUPER-RESOLUTION STUDIO",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = GalaxyLaserAmber
-                )
-                Text(
-                    text = activeRecord?.title ?: "Select a Zoomed Photo",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            OutlinedButton(
-                onClick = {
-                    photoPickerLauncher.launch(
-                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                    )
-                },
-                shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, GalaxyLaserAmber),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                modifier = Modifier.testTag("import_photo_button")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Default.AddPhotoAlternate,
-                    contentDescription = stringResource(R.string.import_photo),
-                    tint = GalaxyLaserAmber,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = stringResource(R.string.import_photo),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = GalaxyLaserAmber
-                )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Surface(
+                            color = GalaxyLaserAmber.copy(alpha = 0.18f),
+                            shape = RoundedCornerShape(6.dp),
+                            border = BorderStroke(1.dp, GalaxyLaserAmber)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.HighQuality,
+                                    contentDescription = "4K Ultra HD",
+                                    tint = GalaxyLaserAmber,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "PRO VISUAL ENGINE • 4K UHD",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = ChampagneGold
+                                )
+                            }
+                        }
+                    }
+
+                    Text(
+                        text = activeRecord?.title ?: "Galaxy AI Zoom Studio",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "Super-Resolution 2x / 4x / 4K (3840p) • Optical & AI Clarity",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(10.dp))
+
+                OutlinedButton(
+                    onClick = {
+                        photoPickerLauncher.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        )
+                    },
+                    shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.2.dp, GalaxyLaserAmber),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+                    modifier = Modifier.testTag("import_photo_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AddPhotoAlternate,
+                        contentDescription = stringResource(R.string.import_photo),
+                        tint = ChampagneGold,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = stringResource(R.string.import_photo),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = ChampagneGold
+                    )
+                }
             }
         }
 
@@ -178,18 +235,21 @@ fun AiZoomEditorScreen(
         ) {
             items(allRecords, key = { it.id }) { record ->
                 val isSelected = record.id == activeRecord?.id
+                val isRecord4k = max(record.enhancedWidth, record.enhancedHeight) >= 3840 ||
+                    record.upscaleFactor == ZoomImageProcessor.SCALE_4K_UHD
                 val borderColor = when {
                     isSelected -> GalaxyLaserAmber
-                    record.isGenerativeAiLabeled -> GenerativeViolet.copy(alpha = 0.7f)
+                    record.isGenerativeAiLabeled -> GenerativeViolet.copy(alpha = 0.75f)
+                    isRecord4k -> Ultra4kEmerald.copy(alpha = 0.8f)
                     record.isEnhanced -> OpticCyan.copy(alpha = 0.7f)
                     else -> MaterialTheme.colorScheme.outline
                 }
                 Box(
                     modifier = Modifier
-                        .width(114.dp)
-                        .height(74.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .border(if (isSelected) 2.dp else 1.dp, borderColor, RoundedCornerShape(12.dp))
+                        .width(122.dp)
+                        .height(78.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .border(if (isSelected) 2.2.dp else 1.dp, borderColor, RoundedCornerShape(14.dp))
                         .clickable { onSelectRecord(record) }
                         .testTag("sample_photo_card_${record.id}")
                 ) {
@@ -199,17 +259,26 @@ fun AiZoomEditorScreen(
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
                     )
-                    // Top-left zoom ratio pill
                     Surface(
-                        color = ObsidianBackground.copy(alpha = 0.85f),
-                        shape = RoundedCornerShape(bottomEnd = 8.dp),
+                        color = ObsidianDeep.copy(alpha = 0.88f),
+                        shape = RoundedCornerShape(bottomEnd = 9.dp),
                         modifier = Modifier.align(Alignment.TopStart)
                     ) {
+                        val badgeLabel = when {
+                            isRecord4k && record.isEnhanced -> "${String.format("%.0fx", record.capturedZoomRatio)} • 4K UHD"
+                            record.isEnhanced -> "${String.format("%.0fx", record.capturedZoomRatio)} • ${record.upscaleFactor}x SR"
+                            else -> "${String.format("%.0fx", record.capturedZoomRatio)} RAW"
+                        }
                         Text(
-                            text = "${String.format("%.0fx", record.capturedZoomRatio)}${if (record.isEnhanced) " • ${record.upscaleFactor}x SR" else ""}",
+                            text = badgeLabel,
                             style = MaterialTheme.typography.labelSmall,
-                            color = if (record.isEnhanced) OpticCyan else GalaxyLaserAmber,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            fontWeight = FontWeight.Bold,
+                            color = when {
+                                isRecord4k && record.isEnhanced -> ChampagneGold
+                                record.isEnhanced -> OpticCyan
+                                else -> GalaxyLaserAmber
+                            },
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
                         )
                     }
                 }
@@ -233,7 +302,7 @@ fun AiZoomEditorScreen(
             onLoupePositionChange = onLoupePositionChange,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(300.dp)
+                .height(310.dp)
         )
 
         // Interactive Split Slider Bar below image when enhanced
@@ -241,7 +310,9 @@ fun AiZoomEditorScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(ControlPodSurface, RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(LuxuryCardBrush)
+                    .border(1.dp, TitaniumHighlight, RoundedCornerShape(14.dp))
                     .padding(horizontal = 14.dp, vertical = 8.dp)
             ) {
                 Row(
@@ -255,15 +326,16 @@ fun AiZoomEditorScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "SPLIT ${(editorState.splitFraction * 100).toInt()}%",
+                        text = "COMPARE SPLIT ${(editorState.splitFraction * 100).toInt()}%",
                         style = MaterialTheme.typography.labelMedium,
-                        color = GalaxyLaserAmber
+                        color = ChampagneGold
                     )
+                    val is4kOut = max(editorState.enhancedBitmap.width, editorState.enhancedBitmap.height) >= 3840
                     Text(
-                        text = if (activeRecord?.isGenerativeAiLabeled == true) {
-                            "AFTER (AI-ENHANCED) ▶"
-                        } else {
-                            "AFTER (${activeRecord?.upscaleFactor ?: 2}x SR) ▶"
+                        text = when {
+                            activeRecord?.isGenerativeAiLabeled == true -> "AFTER (AI-ENHANCED) ▶"
+                            is4kOut -> "AFTER (4K UHD 3840p) ▶"
+                            else -> "AFTER (${activeRecord?.upscaleFactor ?: 2}x SR) ▶"
                         },
                         style = MaterialTheme.typography.labelSmall,
                         color = if (activeRecord?.isGenerativeAiLabeled == true) GenerativeViolet else OpticCyan
@@ -274,7 +346,7 @@ fun AiZoomEditorScreen(
                     onValueChange = onSplitFractionChange,
                     valueRange = 0.02f..0.98f,
                     colors = SliderDefaults.colors(
-                        thumbColor = GalaxyLaserAmber,
+                        thumbColor = ChampagneGold,
                         activeTrackColor = GalaxyLaserAmber,
                         inactiveTrackColor = OpticCyan.copy(alpha = 0.5f)
                     ),
@@ -290,7 +362,7 @@ fun AiZoomEditorScreen(
             val isGenAi = activeRecord?.isGenerativeAiLabeled == true
             Surface(
                 color = if (isGenAi) GenerativeViolet.copy(alpha = 0.16f) else OpticCyan.copy(alpha = 0.14f),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(14.dp),
                 border = BorderStroke(1.dp, if (isGenAi) GenerativeViolet else OpticCyan),
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -327,7 +399,8 @@ fun AiZoomEditorScreen(
         AnimatedVisibility(visible = editorState.isProcessing) {
             Card(
                 colors = CardDefaults.cardColors(containerColor = ElevatedCardSurface),
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, GalaxyLaserAmber),
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("processing_progress_card")
@@ -348,13 +421,13 @@ fun AiZoomEditorScreen(
                         Text(
                             text = "${(editorState.processingProgress * 100).toInt()}%",
                             style = MaterialTheme.typography.labelLarge,
-                            color = GalaxyLaserAmber
+                            color = ChampagneGold
                         )
                     }
                     LinearProgressIndicator(
                         progress = { editorState.processingProgress },
                         color = GalaxyLaserAmber,
-                        trackColor = ObsidianBackground,
+                        trackColor = ObsidianDeep,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(8.dp)
@@ -373,18 +446,18 @@ fun AiZoomEditorScreen(
             Button(
                 onClick = onEnhanceZoomClick,
                 enabled = !editorState.isProcessing && editorState.originalBitmap != null,
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(16.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = if (editorState.selectedMode == EnhancementMode.GENERATIVE_AI_MODE) {
                         GenerativeViolet
                     } else {
                         GalaxyLaserAmber
                     },
-                    contentColor = Color(0xFF101216)
+                    contentColor = Color(0xFF0A0C10)
                 ),
-                contentPadding = PaddingValues(vertical = 14.dp, horizontal = 16.dp),
+                contentPadding = PaddingValues(vertical = 15.dp, horizontal = 16.dp),
                 modifier = Modifier
-                    .weight(1.6f)
+                    .weight(1.7f)
                     .testTag("enhance_zoom_button")
             ) {
                 Icon(
@@ -398,7 +471,7 @@ fun AiZoomEditorScreen(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "${stringResource(R.string.enhance_zoom_button)} (${editorState.selectedUpscaleFactor}x)",
+                    text = "${stringResource(R.string.enhance_zoom_button)} • ${editorState.selectedScaleDisplayLabel}",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -408,9 +481,9 @@ fun AiZoomEditorScreen(
                 OutlinedButton(
                     onClick = onUndoEnhancementClick,
                     enabled = !editorState.isProcessing,
-                    shape = RoundedCornerShape(14.dp),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                    contentPadding = PaddingValues(vertical = 14.dp, horizontal = 12.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, TitaniumHighlight),
+                    contentPadding = PaddingValues(vertical = 15.dp, horizontal = 12.dp),
                     modifier = Modifier.testTag("undo_enhancement_button")
                 ) {
                     Icon(
@@ -424,9 +497,9 @@ fun AiZoomEditorScreen(
             OutlinedButton(
                 onClick = onExportGalleryClick,
                 enabled = !editorState.isProcessing && activeRecord != null,
-                shape = RoundedCornerShape(14.dp),
-                border = BorderStroke(1.dp, OpticCyan),
-                contentPadding = PaddingValues(vertical = 14.dp, horizontal = 12.dp),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.2.dp, OpticCyan),
+                contentPadding = PaddingValues(vertical = 15.dp, horizontal = 12.dp),
                 modifier = Modifier.testTag("export_gallery_button")
             ) {
                 Icon(
@@ -437,17 +510,16 @@ fun AiZoomEditorScreen(
             }
         }
 
-        // 6. Two Enhancement Modes Selector (Detail Mode vs Generative AI Mode)
-        Card(
-            colors = CardDefaults.cardColors(containerColor = ControlPodSurface),
-            shape = RoundedCornerShape(16.dp),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-            modifier = Modifier.fillMaxWidth()
+        // 6. Luxury Resolution & Enhancement Mode Pod (1x, 2x, 4x, and 4K UHD 3840p)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp))
+                .background(LuxuryCardBrush)
+                .border(1.dp, TitaniumHighlight, RoundedCornerShape(18.dp))
+                .padding(16.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -457,21 +529,40 @@ fun AiZoomEditorScreen(
                         Icon(
                             imageVector = Icons.Default.HighQuality,
                             contentDescription = null,
-                            tint = GalaxyLaserAmber,
-                            modifier = Modifier.size(18.dp)
+                            tint = ChampagneGold,
+                            modifier = Modifier.size(19.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "ENHANCEMENT MODE & UPSCALING",
+                            text = "DUAL AI ENGINE & 4K SUPER-RESOLUTION",
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                     }
-                    Text(
-                        text = "${editorState.selectedUpscaleFactor}x OUTPUT",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = OpticCyan
-                    )
+                    Surface(
+                        color = if (editorState.selectedUpscaleFactor == ZoomImageProcessor.SCALE_4K_UHD) {
+                            GalaxyLaserAmber.copy(alpha = 0.2f)
+                        } else {
+                            OpticCyan.copy(alpha = 0.16f)
+                        },
+                        shape = RoundedCornerShape(6.dp),
+                        border = BorderStroke(
+                            1.dp,
+                            if (editorState.selectedUpscaleFactor == ZoomImageProcessor.SCALE_4K_UHD) GalaxyLaserAmber else OpticCyan
+                        )
+                    ) {
+                        Text(
+                            text = if (editorState.selectedUpscaleFactor == ZoomImageProcessor.SCALE_4K_UHD) {
+                                "3840p 4K MASTER"
+                            } else {
+                                "${editorState.selectedUpscaleFactor}x OUTPUT"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (editorState.selectedUpscaleFactor == ZoomImageProcessor.SCALE_4K_UHD) ChampagneGold else OpticCyan,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
                 }
 
                 // Mode Cards Side by Side
@@ -494,7 +585,7 @@ fun AiZoomEditorScreen(
                     EnhancementModeOptionCard(
                         title = "Generative AI",
                         subtitle = "Reconstructs heavily degraded zoom crops. Labeled AI-enhanced.",
-                        badge = "AI RECONSTRUCT",
+                        badge = "GEMINI 4K AI",
                         selected = editorState.selectedMode == EnhancementMode.GENERATIVE_AI_MODE,
                         accentColor = GenerativeViolet,
                         onClick = { onSelectMode(EnhancementMode.GENERATIVE_AI_MODE) },
@@ -504,10 +595,10 @@ fun AiZoomEditorScreen(
                     )
                 }
 
-                // 1x / 2x / 4x Output Resolution Selector
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                // Output Resolution Selector Cards: 1x, 2x, 4x, and 4K UHD (3840p)
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "AI Super-Resolution Output Scale",
+                        text = "Target Output Resolution",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -515,36 +606,46 @@ fun AiZoomEditorScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        listOf(
-                            1 to "1x Clarity",
-                            2 to "2x Upscale (SR)",
-                            4 to "4x Upscale (Ultra SR)"
-                        ).forEach { (scale, label) ->
-                            val isSelected = editorState.selectedUpscaleFactor == scale
-                            FilterChip(
-                                selected = isSelected,
-                                onClick = { onSelectUpscaleFactor(scale) },
-                                label = {
-                                    Text(
-                                        text = label,
-                                        style = MaterialTheme.typography.labelMedium
-                                    )
-                                },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = GalaxyLaserAmber.copy(alpha = 0.22f),
-                                    selectedLabelColor = GalaxyLaserAmber
-                                ),
-                                border = FilterChipDefaults.filterChipBorder(
-                                    enabled = true,
-                                    selected = isSelected,
-                                    selectedBorderColor = GalaxyLaserAmber,
-                                    borderColor = MaterialTheme.colorScheme.outline
-                                ),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("upscale_${scale}x_button")
-                            )
-                        }
+                        ResolutionTierCard(
+                            title = "1x",
+                            subtitle = "Denoise",
+                            isSelected = editorState.selectedUpscaleFactor == 1,
+                            isUltra4k = false,
+                            onClick = { onSelectUpscaleFactor(1) },
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("upscale_1x_button")
+                        )
+                        ResolutionTierCard(
+                            title = "2x SR",
+                            subtitle = "HD Clarity",
+                            isSelected = editorState.selectedUpscaleFactor == 2,
+                            isUltra4k = false,
+                            onClick = { onSelectUpscaleFactor(2) },
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("upscale_2x_button")
+                        )
+                        ResolutionTierCard(
+                            title = "4x SR",
+                            subtitle = "Quad Scale",
+                            isSelected = editorState.selectedUpscaleFactor == 4,
+                            isUltra4k = false,
+                            onClick = { onSelectUpscaleFactor(4) },
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("upscale_4x_button")
+                        )
+                        ResolutionTierCard(
+                            title = "4K UHD",
+                            subtitle = "3840p Pro",
+                            isSelected = editorState.selectedUpscaleFactor == ZoomImageProcessor.SCALE_4K_UHD,
+                            isUltra4k = true,
+                            onClick = { onSelectUpscaleFactor(ZoomImageProcessor.SCALE_4K_UHD) },
+                            modifier = Modifier
+                                .weight(1.15f)
+                                .testTag("upscale_4k_button")
+                        )
                     }
                 }
 
@@ -623,16 +724,15 @@ fun AiZoomEditorScreen(
 
         // 7. AI Zoom Clarity Diagnostics & Zoom Level Calibration
         if (activeRecord != null) {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = ControlPodSurface),
-                shape = RoundedCornerShape(16.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                modifier = Modifier.fillMaxWidth()
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(LuxuryCardBrush)
+                    .border(1.dp, TitaniumHighlight, RoundedCornerShape(18.dp))
+                    .padding(16.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -647,7 +747,7 @@ fun AiZoomEditorScreen(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "ZOOM CLARITY DIAGNOSTICS",
+                                text = "ZOOM CLARITY TELEMETRY",
                                 style = MaterialTheme.typography.labelLarge,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
@@ -655,11 +755,10 @@ fun AiZoomEditorScreen(
                         Text(
                             text = "${activeRecord.originalWidth}×${activeRecord.originalHeight} → ${activeRecord.enhancedWidth}×${activeRecord.enhancedHeight}",
                             style = MaterialTheme.typography.labelSmall,
-                            color = GalaxyLaserAmber
+                            color = ChampagneGold
                         )
                     }
 
-                    // Capture Zoom Level Selector Pills (2x, 5x, 10x, 20x, 30x)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -673,11 +772,11 @@ fun AiZoomEditorScreen(
                         listOf(2.0f, 5.0f, 10.0f, 20.0f, 30.0f).forEach { preset ->
                             val isTagged = kotlin.math.abs(activeRecord.capturedZoomRatio - preset) < 0.4f
                             Surface(
-                                color = if (isTagged) GalaxyLaserAmber else ObsidianBackground,
+                                color = if (isTagged) GalaxyLaserAmber else ObsidianDeep,
                                 shape = RoundedCornerShape(8.dp),
                                 border = BorderStroke(
                                     1.dp,
-                                    if (isTagged) GalaxyLaserAmber else MaterialTheme.colorScheme.outline
+                                    if (isTagged) ChampagneGold else MaterialTheme.colorScheme.outline
                                 ),
                                 modifier = Modifier
                                     .clickable { onUpdateZoomLevelTag(preset) }
@@ -686,14 +785,14 @@ fun AiZoomEditorScreen(
                                 Text(
                                     text = "${preset.toInt()}x",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = if (isTagged) ObsidianBackground else MaterialTheme.colorScheme.onSurface,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isTagged) ObsidianDeep else MaterialTheme.colorScheme.onSurface,
                                     modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
                                 )
                             }
                         }
                     }
 
-                    // 4 Diagnostic Gauges: Blur, Sensor Noise, Compression, Detail Loss
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -720,9 +819,8 @@ fun AiZoomEditorScreen(
                         )
                     }
 
-                    // Optical vs Digital Zoom Physics Explanation Banner
                     Surface(
-                        color = ObsidianBackground,
+                        color = ObsidianDeep,
                         shape = RoundedCornerShape(12.dp),
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                         modifier = Modifier
@@ -738,14 +836,14 @@ fun AiZoomEditorScreen(
                             Icon(
                                 imageVector = Icons.Default.Info,
                                 contentDescription = "Optical Physics Notice",
-                                tint = GalaxyLaserAmber,
+                                tint = ChampagneGold,
                                 modifier = Modifier.size(18.dp)
                             )
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text(
                                     text = "Why Digital Zoom Cannot Recover Uncaptured Optical Detail",
                                     style = MaterialTheme.typography.labelMedium,
-                                    color = GalaxyLaserAmber
+                                    color = ChampagneGold
                                 )
                                 Text(
                                     text = stringResource(R.string.digital_zoom_physics_notice),
@@ -772,9 +870,9 @@ fun AiZoomEditorScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "Optical Zoom vs. Digital Zoom & AI Super-Resolution",
+                    text = "Optical Zoom vs. Digital Zoom & 4K AI Super-Resolution",
                     style = MaterialTheme.typography.titleLarge,
-                    color = GalaxyLaserAmber
+                    color = ChampagneGold
                 )
                 Text(
                     text = "1. Optical & Sensor-Crop Zoom: Uses physical telephoto glass elements (e.g., 3x or 5x periscope optics) or native lossless center-sensor readout to capture real light rays and true spatial frequencies.",
@@ -787,12 +885,59 @@ fun AiZoomEditorScreen(
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = "3. Detail Mode vs. Generative AI Mode: Detail Mode uses deterministic on-device super-resolution and bilateral denoising to sharpen existing edges while preserving 100% of original facial identity and text. Generative AI Mode reconstructs plausible micro-textures in heavily degraded areas and explicitly labels the result as AI-Enhanced.",
+                    text = "3. 4K UHD Detail Mode vs. Generative AI Mode: Detail Mode uses deterministic on-device super-resolution (up to 3840p 4K UHD) and bilateral denoising to sharpen existing edges while preserving 100% of original facial identity and text. Generative AI Mode reconstructs plausible micro-textures in heavily degraded areas and explicitly labels the result as AI-Enhanced.",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(12.dp))
             }
+        }
+    }
+}
+
+@Composable
+private fun ResolutionTierCard(
+    title: String,
+    subtitle: String,
+    isSelected: Boolean,
+    isUltra4k: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val activeAccent = if (isUltra4k) GalaxyLaserAmber else OpticCyan
+    Surface(
+        color = when {
+            isSelected && isUltra4k -> GalaxyLaserAmber.copy(alpha = 0.22f)
+            isSelected -> OpticCyan.copy(alpha = 0.18f)
+            else -> ObsidianDeep
+        },
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(
+            if (isSelected) 1.8.dp else 1.dp,
+            if (isSelected) activeAccent else MaterialTheme.colorScheme.outline
+        ),
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 9.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = if (isSelected) activeAccent else MaterialTheme.colorScheme.onSurface,
+                maxLines = 1
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.labelSmall,
+                color = if (isSelected && isUltra4k) ChampagneGold else MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
+            )
         }
     }
 }
@@ -808,11 +953,11 @@ private fun EnhancementModeOptionCard(
     modifier: Modifier = Modifier
 ) {
     Surface(
-        color = if (selected) accentColor.copy(alpha = 0.14f) else ObsidianBackground,
-        shape = RoundedCornerShape(12.dp),
+        color = if (selected) accentColor.copy(alpha = 0.15f) else ObsidianDeep,
+        shape = RoundedCornerShape(14.dp),
         border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) accentColor else MaterialTheme.colorScheme.outline),
         modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(14.dp))
             .clickable(onClick = onClick)
     ) {
         Column(
@@ -822,6 +967,7 @@ private fun EnhancementModeOptionCard(
             Text(
                 text = badge,
                 style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
                 color = accentColor
             )
             Text(
@@ -851,13 +997,13 @@ private fun DiagnosticMetricBox(
         else -> StatusOptimal
     }
     Surface(
-        color = ObsidianBackground,
-        shape = RoundedCornerShape(10.dp),
+        color = ObsidianDeep,
+        shape = RoundedCornerShape(12.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         modifier = modifier
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 9.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {

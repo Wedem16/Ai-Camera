@@ -40,6 +40,7 @@ data class CameraProTelemetryState(
     val focusPeakingEnabled: Boolean = true,
     val liveHistogramEnabled: Boolean = true,
     val pipZoomLockEnabled: Boolean = true,
+    val capture4kUhdEnabled: Boolean = true,
     val lumaHistogramBins: FloatArray = FloatArray(32) { 0.15f },
     val focusPeakingNormalizedPoints: List<Offset> = emptyList(),
     val isCapturing: Boolean = false
@@ -53,8 +54,8 @@ data class EditorUiState(
     val originalBitmap: Bitmap? = null,
     val enhancedBitmap: Bitmap? = null,
     val selectedMode: EnhancementMode = EnhancementMode.DETAIL_MODE,
-    val selectedUpscaleFactor: Int = 2,
-    val sharpnessStrength: Float = 1.15f,
+    val selectedUpscaleFactor: Int = ZoomImageProcessor.SCALE_4K_UHD,
+    val sharpnessStrength: Float = 1.20f,
     val preserveFaceIdentity: Boolean = true,
     val splitFraction: Float = 0.50f,
     val magnifierLoupeEnabled: Boolean = false,
@@ -64,7 +65,14 @@ data class EditorUiState(
     val processingStageLabel: String = "",
     val showPhysicsSheet: Boolean = false,
     val statusMessage: String? = null
-)
+) {
+    val selectedScaleDisplayLabel: String
+        get() = if (selectedUpscaleFactor == ZoomImageProcessor.SCALE_4K_UHD) {
+            "4K UHD"
+        } else {
+            "${selectedUpscaleFactor}x"
+        }
+}
 
 class ZoomStudioViewModel(
     private val appContext: Context,
@@ -117,7 +125,7 @@ class ZoomStudioViewModel(
             }
             val enhBmp = withContext(Dispatchers.IO) {
                 record.enhancedPath?.let { path ->
-                    ZoomImageProcessor.decodeMemorySafeBitmap(path, 2400)
+                    ZoomImageProcessor.decodeMemorySafeBitmap(path, 3840)
                 }
             }
             _editorState.update { state ->
@@ -130,7 +138,11 @@ class ZoomStudioViewModel(
                     } else {
                         EnhancementMode.DETAIL_MODE
                     },
-                    selectedUpscaleFactor = if (record.upscaleFactor in listOf(1, 2, 4)) record.upscaleFactor else 2,
+                    selectedUpscaleFactor = when (record.upscaleFactor) {
+                        ZoomImageProcessor.SCALE_4K_UHD -> ZoomImageProcessor.SCALE_4K_UHD
+                        2, 4 -> record.upscaleFactor
+                        else -> state.selectedUpscaleFactor
+                    },
                     statusMessage = null
                 )
             }
@@ -145,7 +157,12 @@ class ZoomStudioViewModel(
     }
 
     fun setUpscaleFactor(factor: Int) {
-        _editorState.update { it.copy(selectedUpscaleFactor = factor.coerceIn(1, 4)) }
+        val valid = if (factor == ZoomImageProcessor.SCALE_4K_UHD) {
+            ZoomImageProcessor.SCALE_4K_UHD
+        } else {
+            factor.coerceIn(1, 4)
+        }
+        _editorState.update { it.copy(selectedUpscaleFactor = valid) }
     }
 
     fun setSharpnessStrength(strength: Float) {
@@ -179,10 +196,6 @@ class ZoomStudioViewModel(
         _editorState.update { it.copy(showPhysicsSheet = show) }
     }
 
-    fun clearStatusMessage() {
-        _editorState.update { it.copy(statusMessage = null) }
-    }
-
     fun updatePhotoZoomLevelTag(zoomRatio: Float) {
         val current = _editorState.value.activeRecord ?: return
         viewModelScope.launch {
@@ -197,7 +210,7 @@ class ZoomStudioViewModel(
     }
 
     /**
-     * Triggers AI Zoom Clarity / Super-Resolution processing asynchronously with real-time progress stages.
+     * Triggers AI Zoom Clarity / Super-Resolution (1x, 2x, 4x, or 4K UHD 3840p) asynchronously.
      */
     fun runEnhanceZoom() {
         val state = _editorState.value
@@ -211,7 +224,7 @@ class ZoomStudioViewModel(
                 it.copy(
                     isProcessing = true,
                     processingProgress = 0.04f,
-                    processingStageLabel = "Initializing ${state.selectedMode.displayName} (${state.selectedUpscaleFactor}x)…",
+                    processingStageLabel = "Initializing ${state.selectedMode.displayName} (${state.selectedScaleDisplayLabel})…",
                     statusMessage = null
                 )
             }
@@ -259,6 +272,7 @@ class ZoomStudioViewModel(
                     result = result
                 )
 
+                val resTag = if (result.is4kOutput) "4K UHD • ${result.outputWidth}×${result.outputHeight}" else "${result.outputWidth}×${result.outputHeight}"
                 _editorState.update {
                     it.copy(
                         activeRecord = updatedRecord,
@@ -267,9 +281,9 @@ class ZoomStudioViewModel(
                         processingProgress = 1.0f,
                         processingStageLabel = "",
                         statusMessage = if (result.isGenerativeAi) {
-                            "Generative AI Reconstruction complete (${result.outputWidth}×${result.outputHeight}) • Labeled AI-Enhanced"
+                            "Generative AI Reconstruction complete ($resTag) • Labeled AI-Enhanced"
                         } else {
-                            "Detail Mode ${result.appliedScaleFactor}x Super-Resolution complete (${result.outputWidth}×${result.outputHeight})"
+                            "Detail Mode Super-Resolution complete ($resTag)"
                         }
                     )
                 }
@@ -286,9 +300,6 @@ class ZoomStudioViewModel(
         }
     }
 
-    /**
-     * Reverts the photo to the untouched original sensor capture.
-     */
     fun undoEnhancement() {
         val record = _editorState.value.activeRecord ?: return
         viewModelScope.launch {
@@ -310,7 +321,7 @@ class ZoomStudioViewModel(
             _editorState.update {
                 it.copy(
                     statusMessage = if (ok) {
-                        "Saved to Device Gallery (Pictures/GalaxyZoomAI)"
+                        "Exported master photo to Device Gallery (Pictures/GalaxyZoomAI)"
                     } else {
                         "Could not export to Device Gallery."
                     }
@@ -396,6 +407,10 @@ class ZoomStudioViewModel(
         _cameraState.update { it.copy(pipZoomLockEnabled = !it.pipZoomLockEnabled) }
     }
 
+    fun toggleCapture4kUhd() {
+        _cameraState.update { it.copy(capture4kUhdEnabled = !it.capture4kUhdEnabled) }
+    }
+
     fun updateLiveFrameTelemetry(histogramBins: FloatArray, peakingPoints: List<Offset>) {
         _cameraState.update {
             it.copy(
@@ -420,10 +435,6 @@ class ZoomStudioViewModel(
         }
     }
 
-    /**
-     * Captures a zoomed frame from the optical test bench when hardware CameraX is unavailable or in fallback mode,
-     * applying the exact selected zoom ratio so users can immediately enhance 2x, 5x, 10x, or 20x shots.
-     */
     fun captureProTestBenchPhoto(sceneIndex: Int = 0) {
         val cam = _cameraState.value
         if (cam.isCapturing) return
@@ -432,14 +443,16 @@ class ZoomStudioViewModel(
         viewModelScope.launch {
             val samples = com.example.data.SamplePhotoGenerator.getBuiltInSamples()
             val chosen = samples[sceneIndex.coerceIn(0, samples.lastIndex)]
+            val w = if (cam.capture4kUhdEnabled) 1200 else 800
+            val h = if (cam.capture4kUhdEnabled) 900 else 600
             val bmp = withContext(Dispatchers.Default) {
-                chosen.generator(800, 600)
+                chosen.generator(w, h)
             }
             val dir = File(appContext.filesDir, "zoom_originals").apply { mkdirs() }
             val file = File(dir, "capture_${System.currentTimeMillis()}.jpg")
             withContext(Dispatchers.IO) {
                 FileOutputStream(file).use { out ->
-                    bmp.compress(Bitmap.CompressFormat.JPEG, 92, out)
+                    bmp.compress(Bitmap.CompressFormat.JPEG, 94, out)
                 }
                 bmp.recycle()
             }

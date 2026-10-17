@@ -36,6 +36,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CenterFocusStrong
+import androidx.compose.material.icons.filled.HighQuality
 import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -60,6 +61,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -75,12 +77,17 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.data.SamplePhotoGenerator
 import com.example.ui.CameraProTelemetryState
+import com.example.ui.theme.ChampagneGold
 import com.example.ui.theme.ControlPodSurface
 import com.example.ui.theme.GalaxyLaserAmber
+import com.example.ui.theme.LuxuryCardBrush
+import com.example.ui.theme.LuxuryHeaderBrush
 import com.example.ui.theme.ObsidianBackground
+import com.example.ui.theme.ObsidianDeep
 import com.example.ui.theme.OpticCyan
 import com.example.ui.theme.StatusOptimal
 import com.example.ui.theme.StatusWarning
+import com.example.ui.theme.TitaniumHighlight
 import java.io.File
 import java.util.concurrent.Executors
 import kotlin.math.abs
@@ -95,6 +102,7 @@ fun ProCameraScreen(
     onToggleFocusPeaking: () -> Unit,
     onToggleHistogram: () -> Unit,
     onTogglePipLock: () -> Unit,
+    onToggle4kUhdCapture: () -> Unit = {},
     onLiveTelemetryAnalyzed: (FloatArray, List<Offset>) -> Unit,
     onPhotoCapturedFile: (File, Float, Boolean) -> Unit,
     onCaptureTestBenchScene: (Int) -> Unit,
@@ -126,7 +134,6 @@ fun ProCameraScreen(
         onDispose { analysisExecutor.shutdown() }
     }
 
-    // Apply zoom ratio to hardware CameraX whenever user scrubs zoom slider or taps a preset pill
     LaunchedEffect(cameraState.actualZoomRatio, cameraInstance) {
         val cam = cameraInstance ?: return@LaunchedEffect
         val zoomState = cam.cameraInfo.zoomState.value
@@ -141,134 +148,167 @@ fun ProCameraScreen(
 
     val testScenes = remember { SamplePhotoGenerator.getBuiltInSamples() }
     val testSceneBitmap = remember(activeTestSceneIndex) {
-        testScenes[activeTestSceneIndex].generator(640, 480)
+        testScenes[activeTestSceneIndex].generator(800, 600)
     }
 
     Column(
         modifier = modifier
             .fillMaxSize()
             .background(ObsidianBackground)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+            .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        // 1. Top Pro Viewfinder HUD Bar
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        // 1. Luxury Pro Viewfinder Top Telemetry Bar
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp))
+                .background(LuxuryHeaderBrush)
+                .border(1.dp, TitaniumHighlight, RoundedCornerShape(18.dp))
+                .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
-            Column {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Surface(
-                        color = if (cameraState.isOpticalOrSensorZoom) {
-                            StatusOptimal.copy(alpha = 0.2f)
-                        } else {
-                            StatusWarning.copy(alpha = 0.2f)
-                        },
-                        shape = RoundedCornerShape(6.dp),
-                        border = BorderStroke(
-                            1.dp,
-                            if (cameraState.isOpticalOrSensorZoom) StatusOptimal else StatusWarning
-                        )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Text(
-                            text = if (cameraState.isOpticalOrSensorZoom) {
-                                "OPTICAL / SENSOR ZOOM"
+                        Surface(
+                            color = if (cameraState.isOpticalOrSensorZoom) {
+                                StatusOptimal.copy(alpha = 0.2f)
                             } else {
-                                "DIGITAL ZOOM"
+                                StatusWarning.copy(alpha = 0.2f)
                             },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (cameraState.isOpticalOrSensorZoom) StatusOptimal else StatusWarning,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            shape = RoundedCornerShape(6.dp),
+                            border = BorderStroke(
+                                1.dp,
+                                if (cameraState.isOpticalOrSensorZoom) StatusOptimal else StatusWarning
+                            )
+                        ) {
+                            Text(
+                                text = if (cameraState.isOpticalOrSensorZoom) {
+                                    "OPTICAL / SENSOR"
+                                } else {
+                                    "DIGITAL ZOOM"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = if (cameraState.isOpticalOrSensorZoom) StatusOptimal else StatusWarning,
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                            )
+                        }
+
+                        Text(
+                            text = String.format("%.1fx", cameraState.actualZoomRatio),
+                            style = MaterialTheme.typography.titleLarge,
+                            color = ChampagneGold,
+                            modifier = Modifier.testTag("camera_zoom_ratio_text")
+                        )
+                    }
+                    Text(
+                        text = "Live hardware zoom • 4K AI Super-Resolution runs post-capture",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                // Pro Viewfinder Overlay Toggles: 4K UHD, Focus Peaking, Live Histogram, PiP Guide
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    IconButton(
+                        onClick = onToggle4kUhdCapture,
+                        modifier = Modifier
+                            .size(38.dp)
+                            .background(
+                                if (cameraState.capture4kUhdEnabled) GalaxyLaserAmber.copy(alpha = 0.22f) else ControlPodSurface,
+                                CircleShape
+                            )
+                            .border(
+                                1.dp,
+                                if (cameraState.capture4kUhdEnabled) GalaxyLaserAmber else MaterialTheme.colorScheme.outline,
+                                CircleShape
+                            )
+                            .testTag("toggle_4k_capture_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.HighQuality,
+                            contentDescription = "Toggle 4K UHD Capture",
+                            tint = if (cameraState.capture4kUhdEnabled) ChampagneGold else MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(19.dp)
                         )
                     }
 
-                    Text(
-                        text = String.format("%.1fx", cameraState.actualZoomRatio),
-                        style = MaterialTheme.typography.titleLarge,
-                        color = GalaxyLaserAmber,
-                        modifier = Modifier.testTag("camera_zoom_ratio_text")
-                    )
-                }
-                Text(
-                    text = "Live preview: Hardware zoom • AI Super-Resolution runs post-capture",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+                    IconButton(
+                        onClick = onToggleFocusPeaking,
+                        modifier = Modifier
+                            .size(38.dp)
+                            .background(
+                                if (cameraState.focusPeakingEnabled) OpticCyan.copy(alpha = 0.2f) else ControlPodSurface,
+                                CircleShape
+                            )
+                            .border(
+                                1.dp,
+                                if (cameraState.focusPeakingEnabled) OpticCyan else MaterialTheme.colorScheme.outline,
+                                CircleShape
+                            )
+                            .testTag("toggle_peaking_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CenterFocusStrong,
+                            contentDescription = "Toggle Focus Peaking",
+                            tint = if (cameraState.focusPeakingEnabled) OpticCyan else MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
 
-            // Pro Viewfinder Overlay Toggles: Focus Peaking, Live Histogram, PiP Guide
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                IconButton(
-                    onClick = onToggleFocusPeaking,
-                    modifier = Modifier
-                        .size(38.dp)
-                        .background(
-                            if (cameraState.focusPeakingEnabled) OpticCyan.copy(alpha = 0.2f) else ControlPodSurface,
-                            CircleShape
+                    IconButton(
+                        onClick = onToggleHistogram,
+                        modifier = Modifier
+                            .size(38.dp)
+                            .background(
+                                if (cameraState.liveHistogramEnabled) GalaxyLaserAmber.copy(alpha = 0.2f) else ControlPodSurface,
+                                CircleShape
+                            )
+                            .border(
+                                1.dp,
+                                if (cameraState.liveHistogramEnabled) GalaxyLaserAmber else MaterialTheme.colorScheme.outline,
+                                CircleShape
+                            )
+                            .testTag("toggle_histogram_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.BarChart,
+                            contentDescription = "Toggle Live Histogram",
+                            tint = if (cameraState.liveHistogramEnabled) ChampagneGold else MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(18.dp)
                         )
-                        .border(
-                            1.dp,
-                            if (cameraState.focusPeakingEnabled) OpticCyan else MaterialTheme.colorScheme.outline,
-                            CircleShape
-                        )
-                        .testTag("toggle_peaking_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.CenterFocusStrong,
-                        contentDescription = "Toggle Focus Peaking",
-                        tint = if (cameraState.focusPeakingEnabled) OpticCyan else MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
+                    }
 
-                IconButton(
-                    onClick = onToggleHistogram,
-                    modifier = Modifier
-                        .size(38.dp)
-                        .background(
-                            if (cameraState.liveHistogramEnabled) GalaxyLaserAmber.copy(alpha = 0.2f) else ControlPodSurface,
-                            CircleShape
+                    IconButton(
+                        onClick = onTogglePipLock,
+                        modifier = Modifier
+                            .size(38.dp)
+                            .background(
+                                if (cameraState.pipZoomLockEnabled) GalaxyLaserAmber.copy(alpha = 0.2f) else ControlPodSurface,
+                                CircleShape
+                            )
+                            .border(
+                                1.dp,
+                                if (cameraState.pipZoomLockEnabled) GalaxyLaserAmber else MaterialTheme.colorScheme.outline,
+                                CircleShape
+                            )
+                            .testTag("toggle_pip_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PictureInPictureAlt,
+                            contentDescription = "Toggle PiP Zoom Target Guide",
+                            tint = if (cameraState.pipZoomLockEnabled) ChampagneGold else MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(18.dp)
                         )
-                        .border(
-                            1.dp,
-                            if (cameraState.liveHistogramEnabled) GalaxyLaserAmber else MaterialTheme.colorScheme.outline,
-                            CircleShape
-                        )
-                        .testTag("toggle_histogram_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.BarChart,
-                        contentDescription = "Toggle Live Histogram",
-                        tint = if (cameraState.liveHistogramEnabled) GalaxyLaserAmber else MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-
-                IconButton(
-                    onClick = onTogglePipLock,
-                    modifier = Modifier
-                        .size(38.dp)
-                        .background(
-                            if (cameraState.pipZoomLockEnabled) GalaxyLaserAmber.copy(alpha = 0.2f) else ControlPodSurface,
-                            CircleShape
-                        )
-                        .border(
-                            1.dp,
-                            if (cameraState.pipZoomLockEnabled) GalaxyLaserAmber else MaterialTheme.colorScheme.outline,
-                            CircleShape
-                        )
-                        .testTag("toggle_pip_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.PictureInPictureAlt,
-                        contentDescription = "Toggle PiP Zoom Target Guide",
-                        tint = if (cameraState.pipZoomLockEnabled) GalaxyLaserAmber else MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.size(18.dp)
-                    )
+                    }
                 }
             }
         }
@@ -278,9 +318,13 @@ fun ProCameraScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .clip(RoundedCornerShape(20.dp))
-                .background(Color(0xFF07090D))
-                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(20.dp))
+                .clip(RoundedCornerShape(22.dp))
+                .background(ObsidianDeep)
+                .border(
+                    1.5.dp,
+                    Brush.linearGradient(listOf(TitaniumHighlight, GalaxyLaserAmber.copy(alpha = 0.6f), OpticCyan.copy(alpha = 0.5f))),
+                    RoundedCornerShape(22.dp)
+                )
                 .pointerInput(Unit) {
                     detectTransformGestures { _, _, zoomChange, _ ->
                         if (zoomChange != 1.0f) {
@@ -346,7 +390,6 @@ fun ProCameraScreen(
                     modifier = Modifier.fillMaxSize()
                 )
             } else {
-                // Interactive Optical Zoom Simulation Bench when running without physical camera sensor or permission
                 val imgBitmap = remember(testSceneBitmap) { testSceneBitmap.asImageBitmap() }
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     val zoom = cameraState.actualZoomRatio.coerceIn(1.0f, 30.0f)
@@ -370,63 +413,59 @@ fun ProCameraScreen(
                 val w = size.width
                 val h = size.height
 
-                // Rule-of-thirds optical grid
                 val gridColor = Color.White.copy(alpha = 0.14f)
                 drawLine(gridColor, Offset(w / 3f, 0f), Offset(w / 3f, h), strokeWidth = 1.dp.toPx())
                 drawLine(gridColor, Offset(w * 2f / 3f, 0f), Offset(w * 2f / 3f, h), strokeWidth = 1.dp.toPx())
                 drawLine(gridColor, Offset(0f, h / 3f), Offset(w, h / 3f), strokeWidth = 1.dp.toPx())
                 drawLine(gridColor, Offset(0f, h * 2f / 3f), Offset(w, h * 2f / 3f), strokeWidth = 1.dp.toPx())
 
-                // Focus Peaking Cyan Edge Highlights
                 if (cameraState.focusPeakingEnabled) {
                     val points = cameraState.focusPeakingNormalizedPoints
                     if (points.isNotEmpty()) {
                         points.forEach { norm ->
                             drawCircle(
-                                color = OpticCyan.copy(alpha = 0.78f),
+                                color = OpticCyan.copy(alpha = 0.80f),
                                 radius = 2.2.dp.toPx(),
                                 center = Offset(norm.x * w, norm.y * h)
                             )
                         }
                     } else {
-                        // Deterministic edge-peaking ring around center AF zone when static
                         drawCircle(
-                            color = OpticCyan.copy(alpha = 0.65f),
+                            color = OpticCyan.copy(alpha = 0.68f),
                             radius = min(w, h) * 0.16f,
                             center = Offset(w * 0.5f, h * 0.5f),
-                            style = Stroke(width = 1.5.dp.toPx())
+                            style = Stroke(width = 1.6.dp.toPx())
                         )
                     }
                 }
 
-                // Center AF Crosshair
                 val cx = w * 0.5f
                 val cy = h * 0.5f
-                val arm = 14.dp.toPx()
-                drawLine(GalaxyLaserAmber, Offset(cx - arm, cy), Offset(cx + arm, cy), strokeWidth = 1.5.dp.toPx())
-                drawLine(GalaxyLaserAmber, Offset(cx, cy - arm), Offset(cx, cy + arm), strokeWidth = 1.5.dp.toPx())
+                val arm = 15.dp.toPx()
+                drawLine(ChampagneGold, Offset(cx - arm, cy), Offset(cx + arm, cy), strokeWidth = 1.6.dp.toPx())
+                drawLine(ChampagneGold, Offset(cx, cy - arm), Offset(cx, cy + arm), strokeWidth = 1.6.dp.toPx())
             }
 
             // Top-Left Live Luminance Histogram Overlay
             if (cameraState.liveHistogramEnabled) {
                 Surface(
-                    color = ObsidianBackground.copy(alpha = 0.82f),
-                    shape = RoundedCornerShape(10.dp),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                    color = ObsidianDeep.copy(alpha = 0.86f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, TitaniumHighlight),
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .padding(12.dp)
                 ) {
-                    Column(modifier = Modifier.padding(8.dp)) {
+                    Column(modifier = Modifier.padding(9.dp)) {
                         Text(
-                            text = "LIVE LUMA HISTOGRAM ${if (cameraState.focusPeakingEnabled) "• PEAKING ON" else ""}",
+                            text = "LUMA WAVEFORM ${if (cameraState.capture4kUhdEnabled) "• 4K UHD" else "• FHD"}",
                             style = MaterialTheme.typography.labelSmall,
-                            color = OpticCyan
+                            color = ChampagneGold
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Canvas(
                             modifier = Modifier
-                                .width(124.dp)
+                                .width(128.dp)
                                 .height(38.dp)
                         ) {
                             val bins = cameraState.lumaHistogramBins
@@ -434,7 +473,7 @@ fun ProCameraScreen(
                             bins.forEachIndexed { i, value ->
                                 val barH = (value.coerceIn(0.05f, 1.0f)) * size.height
                                 drawRect(
-                                    color = GalaxyLaserAmber.copy(alpha = 0.85f),
+                                    color = GalaxyLaserAmber.copy(alpha = 0.88f),
                                     topLeft = Offset(i * barW, size.height - barH),
                                     size = Size((barW - 1f).coerceAtLeast(1f), barH)
                                 )
@@ -447,13 +486,13 @@ fun ProCameraScreen(
             // Top-Right Picture-in-Picture (PiP) Zoom Lock Target Guide when Zoom >= 3.0x
             if (cameraState.pipZoomLockEnabled && cameraState.actualZoomRatio >= 3.0f) {
                 Surface(
-                    color = ObsidianBackground.copy(alpha = 0.88f),
-                    shape = RoundedCornerShape(10.dp),
+                    color = ObsidianDeep.copy(alpha = 0.90f),
+                    shape = RoundedCornerShape(12.dp),
                     border = BorderStroke(1.5.dp, GalaxyLaserAmber),
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(12.dp)
-                        .size(width = 108.dp, height = 82.dp)
+                        .size(width = 112.dp, height = 84.dp)
                 ) {
                     Box(modifier = Modifier.fillMaxSize()) {
                         Canvas(modifier = Modifier.fillMaxSize()) {
@@ -463,7 +502,7 @@ fun ProCameraScreen(
                             val left = (size.width - rectW) / 2f
                             val top = (size.height - rectH) / 2f
                             drawRect(
-                                color = GalaxyLaserAmber,
+                                color = ChampagneGold,
                                 topLeft = Offset(left, top),
                                 size = Size(rectW, rectH),
                                 style = Stroke(width = 2.dp.toPx())
@@ -472,7 +511,7 @@ fun ProCameraScreen(
                         Text(
                             text = "ZOOM LOCK ${String.format("%.1fx", cameraState.actualZoomRatio)}",
                             style = MaterialTheme.typography.labelSmall,
-                            color = GalaxyLaserAmber,
+                            color = ChampagneGold,
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
                                 .padding(bottom = 4.dp)
@@ -481,10 +520,9 @@ fun ProCameraScreen(
                 }
             }
 
-            // Permission request banner if CAMERA permission is not granted yet
             if (!hasCameraPermission) {
                 Surface(
-                    color = ObsidianBackground.copy(alpha = 0.88f),
+                    color = ObsidianDeep.copy(alpha = 0.90f),
                     shape = RoundedCornerShape(14.dp),
                     border = BorderStroke(1.dp, GalaxyLaserAmber),
                     modifier = Modifier
@@ -498,9 +536,9 @@ fun ProCameraScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Optical Test Bench Active",
+                                text = "4K Optical Test Bench Active",
                                 style = MaterialTheme.typography.labelMedium,
-                                color = GalaxyLaserAmber
+                                color = ChampagneGold
                             )
                             Text(
                                 text = "Grant Camera permission for live hardware sensor, or capture directly from the telephoto test target.",
@@ -512,7 +550,7 @@ fun ProCameraScreen(
                             onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) },
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = GalaxyLaserAmber,
-                                contentColor = ObsidianBackground
+                                contentColor = ObsidianDeep
                             ),
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier.testTag("grant_camera_permission_button")
@@ -524,17 +562,16 @@ fun ProCameraScreen(
             }
         }
 
-        // 3. Quick Zoom Preset Pills (1x, 2x, 5x, 10x, 20x) + Smooth Zoom Slider
-        Surface(
-            color = ControlPodSurface,
-            shape = RoundedCornerShape(16.dp),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-            modifier = Modifier.fillMaxWidth()
+        // 3. Luxury Brushed Titanium Zoom Preset Dial (1x, 2x, 5x, 10x, 20x) + Smooth Zoom Slider
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp))
+                .background(LuxuryCardBrush)
+                .border(1.dp, TitaniumHighlight, RoundedCornerShape(18.dp))
+                .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly,
@@ -543,11 +580,11 @@ fun ProCameraScreen(
                     listOf(1.0f, 2.0f, 5.0f, 10.0f, 20.0f).forEach { preset ->
                         val isActive = abs(cameraState.actualZoomRatio - preset) < 0.35f
                         Surface(
-                            color = if (isActive) GalaxyLaserAmber else ObsidianBackground,
+                            color = if (isActive) GalaxyLaserAmber else ObsidianDeep,
                             shape = CircleShape,
                             border = BorderStroke(
-                                1.dp,
-                                if (isActive) GalaxyLaserAmber else MaterialTheme.colorScheme.outline
+                                1.2.dp,
+                                if (isActive) ChampagneGold else MaterialTheme.colorScheme.outline
                             ),
                             modifier = Modifier
                                 .clickable { onSetTargetZoom(preset) }
@@ -557,8 +594,8 @@ fun ProCameraScreen(
                                 text = "${preset.toInt()}x",
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.Bold,
-                                color = if (isActive) ObsidianBackground else MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                                color = if (isActive) ObsidianDeep else MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.padding(horizontal = 15.dp, vertical = 7.dp)
                             )
                         }
                     }
@@ -569,9 +606,9 @@ fun ProCameraScreen(
                     onValueChange = onSetTargetZoom,
                     valueRange = 1.0f..20.0f,
                     colors = SliderDefaults.colors(
-                        thumbColor = GalaxyLaserAmber,
+                        thumbColor = ChampagneGold,
                         activeTrackColor = GalaxyLaserAmber,
-                        inactiveTrackColor = ObsidianBackground
+                        inactiveTrackColor = ObsidianDeep
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -588,23 +625,21 @@ fun ProCameraScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Switch optical test target scene
             OutlinedButton(
                 onClick = {
                     activeTestSceneIndex = (activeTestSceneIndex + 1) % testScenes.size
                 },
-                shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.dp, TitaniumHighlight),
                 modifier = Modifier.testTag("cycle_test_scene_button")
             ) {
                 Text(
-                    text = "Target #${activeTestSceneIndex + 1}",
+                    text = "Scene #${activeTestSceneIndex + 1}",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurface
                 )
             }
 
-            // Primary Telephoto Shutter Button
             Button(
                 onClick = {
                     val captureUseCase = imageCaptureUseCase
@@ -636,7 +671,7 @@ fun ProCameraScreen(
                 shape = CircleShape,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = GalaxyLaserAmber,
-                    contentColor = ObsidianBackground
+                    contentColor = ObsidianDeep
                 ),
                 modifier = Modifier
                     .height(54.dp)
@@ -649,7 +684,7 @@ fun ProCameraScreen(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Capture ${String.format("%.1fx", cameraState.actualZoomRatio)} → Enhance",
+                    text = "Capture ${String.format("%.1fx", cameraState.actualZoomRatio)} → 4K Studio",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -674,7 +709,6 @@ private fun analyzeLiveFrameTelemetry(
         val peakingPoints = ArrayList<Offset>(120)
         val stepX = (width / 40).coerceAtLeast(4)
         val stepY = (height / 40).coerceAtLeast(4)
-        var totalSamples = 0
 
         for (y in stepY until height - stepY step stepY) {
             for (x in stepX until width - stepX step stepX) {
@@ -684,7 +718,6 @@ private fun analyzeLiveFrameTelemetry(
                 val luma = buffer.get(idx).toInt() and 0xFF
                 val binIdx = (luma * 31) / 255
                 bins[binIdx]++
-                totalSamples++
 
                 val right = buffer.get(idx + pixelStride).toInt() and 0xFF
                 val down = buffer.get(idx + rowStride).toInt() and 0xFF
@@ -701,7 +734,6 @@ private fun analyzeLiveFrameTelemetry(
         }
         onResult(normalizedBins, peakingPoints)
     } catch (_: Exception) {
-        // Ignore frame buffer exceptions during camera lifecycle transitions
     } finally {
         imageProxy.close()
     }
