@@ -1,0 +1,13 @@
+<resources>
+    <string name="app_name">Galaxy Zoom AI</string>
+    <string name="tab_camera">Pro Camera</string>
+    <string name="tab_studio">AI Zoom Studio</string>
+    <string name="tab_gallery">History &amp; Lab</string>
+    <string name="enhance_zoom_button">Enhance Zoom</string>
+    <string name="undo_enhancement">Revert to Original</string>
+    <string name="export_gallery">Export to Gallery</string>
+    <string name="import_photo">Import Photo</string>
+    <string name="digital_zoom_physics_notice">Optical vs. Digital Zoom Notice: Digital zoom enlarges sensor pixels and cannot recover physical optical information that the camera lens never captured. Detail Mode sharpens existing structures and removes noise, while Generative AI Mode reconstructs degraded textures and labels them as AI-enhanced.</string>
+    <string name="generative_ai_badge">AI-ENHANCED • GENERATIVE RECONSTRUCTION</string>
+    <string name="detail_mode_badge">DETAIL MODE • ON-DEVICE SUPER RESOLUTION</string>
+</resources>

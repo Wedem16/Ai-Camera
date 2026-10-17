@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Outer Telephoto Periscope Housing Ring -->
+    <path
+        android:fillColor="#232B3A"
+        android:strokeColor="#FFB800"
+        android:strokeWidth="2.8"
+        android:pathData="M54,24A30,30 0,1 1,24 54A30,30 0,0 1,54 24Z" />
+    <!-- Inner Optical Element -->
+    <path
+        android:fillColor="#0D131F"
+        android:strokeColor="#00E5FF"
+        android:strokeWidth="2.2"
+        android:pathData="M54,33A21,21 0,1 1,33 54A21,21 0,0 1,54 33Z" />
+    <!-- Periscope Prism Rectangular Aperture -->
+    <path
+        android:fillColor="#162438"
+        android:strokeColor="#00E5FF"
+        android:strokeWidth="1.8"
+        android:pathData="M43,43h22v22h-22z" />
+    <!-- AI Super-Resolution Four-Point Star in Lens Core -->
+    <path
+        android:fillColor="#FFB800"
+        android:pathData="M54,44 L56.6,51.4 L64,54 L56.6,56.6 L54,64 L51.4,56.6 L44,54 L51.4,51.4 Z" />
+    <!-- Optical Coating Glint -->
+    <path
+        android:fillColor="#8000E5FF"
+        android:pathData="M42,38A4,4 0,1 1,38 42A4,4 0,0 1,42 38Z" />
+    <!-- 100X / SR Calibration Ticks -->
+    <path
+        android:fillColor="#FFB800"
+        android:pathData="M53,18h2v4h-2zM53,86h2v4h-2zM18,53h4v2h-4zM86,53h4v2h-4z" />
+</vector>

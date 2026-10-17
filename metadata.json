@@ -1,0 +1,10 @@
+{
+  "name": "Galaxy Zoom AI",
+  "description": "Advanced AI Super-Resolution, Zoom Clarity Editor, and Pro CameraX Telephoto Studio inspired by flagship Galaxy camera systems.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
